@@ -1,0 +1,1871 @@
+# 🏍️ MOTOTAXI CONNECT - Guía Completa de Implementación
+
+## 📋 Tabla de Contenidos
+1. [Resumen Ejecutivo](#resumen-ejecutivo)
+2. [Análisis del Proyecto](#análisis-del-proyecto)
+3. [Arquitectura Técnica](#arquitectura-técnica)
+4. [Modelo de Base de Datos](#modelo-de-base-de-datos)
+5. [Funcionalidades Core](#funcionalidades-core)
+6. [Sistema de Negociación](#sistema-de-negociación)
+7. [APIs y Endpoints](#apis-y-endpoints)
+8. [Implementación de Tiempo Real](#implementación-de-tiempo-real)
+9. [Sistema de Pagos](#sistema-de-pagos)
+10. [Seguridad](#seguridad)
+11. [Monetización](#monetización)
+12. [Plan de Desarrollo](#plan-de-desarrollo)
+13. [Estimación de Costos](#estimación-de-costos)
+14. [Consideraciones Legales](#consideraciones-legales)
+
+---
+
+## 📝 Resumen Ejecutivo
+
+**MotoTaxi Connect** es una plataforma digital que revoluciona el transporte en mototaxi mediante un sistema de negociación de precios en tiempo real, conectando pasajeros con conductores de manera eficiente, segura y transparente.
+
+### Propuesta de Valor
+- **Para Pasajeros**: Control sobre el precio, múltiples opciones, transparencia total
+- **Para Conductores**: Mayor volumen de viajes, precios justos, flexibilidad
+- **Para el Mercado**: Formalización del sector, datos estadísticos, seguridad mejorada
+
+---
+
+## 🎯 Análisis del Proyecto
+
+### 2.1 Problemática Actual
+- Falta de transparencia en precios de mototaxis
+- Inseguridad para pasajeros y conductores
+- Dificultad para encontrar servicio en zonas alejadas
+- Ausencia de historial y trazabilidad
+- Informalidad del sector
+
+### 2.2 Solución Propuesta
+Una aplicación móvil que permite:
+- Negociación transparente de tarifas
+- Sistema de ofertas y contraofertas
+- Verificación de conductores
+- Tracking GPS en tiempo real
+- Calificaciones bidireccionales
+- Historial de viajes
+
+### 2.3 Mercado Objetivo
+- **Primario**: Ciudades con alto uso de mototaxis (Iquitos, Tarapoto, Pucallpa, Tumbes)
+- **Secundario**: Zonas periurbanas de Lima y otras ciudades principales
+- **Usuarios Target**: 18-45 años, smartphones Android principalmente
+
+### 2.4 Competencia y Diferenciación
+| Característica | InDriver | Uber | MotoTaxi Connect |
+|---------------|----------|------|------------------|
+| Negociación de precio | ✅ | ❌ | ✅ |
+| Enfoque en motos | ❌ | Parcial | ✅ |
+| Múltiples ofertas | ✅ | ❌ | ✅ |
+| Verificación local | ❌ | ✅ | ✅ |
+| Pagos en efectivo | ✅ | Limitado | ✅ |
+
+---
+
+## 🏗️ Arquitectura Técnica
+
+### 3.1 Stack Tecnológico
+
+#### Backend
+```yaml
+Core:
+  - Node.js 20 LTS con TypeScript
+  - Framework: NestJS (estructura empresarial)
+  - ORM: Prisma (type-safe, migraciones automáticas)
+  
+Base de Datos:
+  - PostgreSQL 15 (datos transaccionales)
+  - Redis (caché, sesiones, colas)
+  - MongoDB (logs, analytics)
+  
+Tiempo Real:
+  - Socket.io (WebSockets)
+  - Redis Pub/Sub (mensajería entre servicios)
+  
+Mensajería:
+  - RabbitMQ (procesamiento asíncrono)
+  - Bull (gestión de colas)
+```
+
+#### Frontend Mobile
+```yaml
+Framework:
+  - React Native con Expo
+  - TypeScript
+  - React Navigation 6
+  
+Estado:
+  - Redux Toolkit + RTK Query
+  - Redux Persist
+  
+Mapas:
+  - Google Maps API
+  - React Native Maps
+  
+UI:
+  - NativeBase / Tamagui
+  - React Native Reanimated
+```
+
+#### Frontend Web Admin
+```yaml
+Framework:
+  - Next.js 14 con App Router
+  - TypeScript
+  - Tailwind CSS
+  
+Componentes:
+  - shadcn/ui
+  - Recharts (gráficos)
+  - React Table (tablas)
+  
+Estado:
+  - Zustand
+  - React Query
+```
+
+### 3.2 Arquitectura de Microservicios
+
+```mermaid
+graph TB
+    subgraph "Cliente"
+        A[App Móvil Pasajero]
+        B[App Móvil Conductor]
+        C[Panel Web Admin]
+    end
+    
+    subgraph "API Gateway"
+        D[Kong/Express Gateway]
+    end
+    
+    subgraph "Microservicios"
+        E[Servicio Usuarios]
+        F[Servicio Viajes]
+        G[Servicio Negociación]
+        H[Servicio Pagos]
+        I[Servicio Notificaciones]
+        J[Servicio Geolocalización]
+        K[Servicio Analytics]
+    end
+    
+    subgraph "Bases de Datos"
+        L[(PostgreSQL)]
+        M[(Redis)]
+        N[(MongoDB)]
+    end
+    
+    A --> D
+    B --> D
+    C --> D
+    D --> E
+    D --> F
+    D --> G
+    D --> H
+    D --> I
+    D --> J
+    D --> K
+    E --> L
+    F --> L
+    G --> M
+    J --> M
+    K --> N
+```
+
+### 3.3 Infraestructura
+
+```yaml
+Desarrollo:
+  - Docker Compose local
+  - PostgreSQL en container
+  - Redis en container
+  
+Staging:
+  - VPS 4GB RAM (DigitalOcean/Linode)
+  - Docker Swarm
+  - Nginx reverse proxy
+  
+Producción:
+  - Kubernetes (EKS/GKE)
+  - Load Balancer
+  - Auto-scaling
+  - CDN CloudFlare
+  
+CI/CD:
+  - GitHub Actions
+  - Docker Registry
+  - Automated testing
+  - Blue-Green deployments
+```
+
+---
+
+## 💾 Modelo de Base de Datos
+
+### 4.1 Esquema Principal
+
+```sql
+-- =============================================
+-- TABLA: usuarios
+-- =============================================
+CREATE TABLE usuarios (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    telefono VARCHAR(15) UNIQUE NOT NULL,
+    codigo_pais VARCHAR(5) DEFAULT '+51',
+    nombre VARCHAR(100) NOT NULL,
+    apellidos VARCHAR(100),
+    email VARCHAR(100) UNIQUE,
+    dni VARCHAR(8) UNIQUE,
+    fecha_nacimiento DATE,
+    genero ENUM('M', 'F', 'O'),
+    foto_perfil TEXT,
+    tipo_usuario ENUM('pasajero', 'conductor', 'admin') NOT NULL,
+    estado ENUM('activo', 'suspendido', 'verificando', 'baneado') DEFAULT 'verificando',
+    calificacion_promedio DECIMAL(3,2) DEFAULT 0.00,
+    total_viajes INTEGER DEFAULT 0,
+    fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    ultimo_acceso TIMESTAMP,
+    token_dispositivo TEXT, -- Para push notifications
+    preferencias JSONB DEFAULT '{}',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_usuarios_telefono ON usuarios(telefono);
+CREATE INDEX idx_usuarios_tipo ON usuarios(tipo_usuario);
+CREATE INDEX idx_usuarios_estado ON usuarios(estado);
+
+-- =============================================
+-- TABLA: conductores
+-- =============================================
+CREATE TABLE conductores (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    usuario_id UUID NOT NULL UNIQUE,
+    
+    -- Documentación
+    licencia_numero VARCHAR(20) NOT NULL,
+    licencia_categoria VARCHAR(10),
+    licencia_vencimiento DATE NOT NULL,
+    licencia_foto_frontal TEXT,
+    licencia_foto_posterior TEXT,
+    
+    -- Vehículo
+    placa VARCHAR(10) UNIQUE NOT NULL,
+    marca_moto VARCHAR(50),
+    modelo_moto VARCHAR(50),
+    año_moto INTEGER,
+    color_moto VARCHAR(30),
+    foto_moto TEXT,
+    
+    -- Seguros
+    soat_numero VARCHAR(50),
+    soat_aseguradora VARCHAR(100),
+    soat_vencimiento DATE,
+    soat_foto TEXT,
+    
+    -- Operación
+    estado_verificacion ENUM('pendiente', 'aprobado', 'rechazado', 'documentos_vencidos') DEFAULT 'pendiente',
+    motivo_rechazo TEXT,
+    disponible BOOLEAN DEFAULT false,
+    en_servicio BOOLEAN DEFAULT false,
+    ubicacion_actual GEOGRAPHY(POINT, 4326),
+    ultima_actualizacion_ubicacion TIMESTAMP,
+    
+    -- Financiero
+    saldo_ganado DECIMAL(10,2) DEFAULT 0.00,
+    saldo_disponible DECIMAL(10,2) DEFAULT 0.00,
+    comision_porcentaje DECIMAL(5,2) DEFAULT 15.00,
+    
+    -- Estadísticas
+    viajes_completados INTEGER DEFAULT 0,
+    viajes_cancelados INTEGER DEFAULT 0,
+    km_recorridos DECIMAL(10,2) DEFAULT 0.00,
+    tiempo_en_linea INTEGER DEFAULT 0, -- minutos
+    
+    verificado_por UUID,
+    fecha_verificacion TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+    FOREIGN KEY (verificado_por) REFERENCES usuarios(id)
+);
+
+CREATE INDEX idx_conductores_disponible ON conductores(disponible);
+CREATE INDEX idx_conductores_ubicacion ON conductores USING GIST(ubicacion_actual);
+CREATE INDEX idx_conductores_estado ON conductores(estado_verificacion);
+
+-- =============================================
+-- TABLA: viajes
+-- =============================================
+CREATE TABLE viajes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    codigo_viaje VARCHAR(10) UNIQUE NOT NULL, -- Código corto para referencia
+    
+    -- Participantes
+    pasajero_id UUID NOT NULL,
+    conductor_id UUID,
+    
+    -- Origen
+    origen_latitud DECIMAL(10,8) NOT NULL,
+    origen_longitud DECIMAL(11,8) NOT NULL,
+    origen_direccion TEXT NOT NULL,
+    origen_referencia TEXT,
+    
+    -- Destino
+    destino_latitud DECIMAL(10,8) NOT NULL,
+    destino_longitud DECIMAL(11,8) NOT NULL,
+    destino_direccion TEXT NOT NULL,
+    destino_referencia TEXT,
+    
+    -- Métricas
+    distancia_km DECIMAL(5,2),
+    distancia_calculada_km DECIMAL(5,2), -- Distancia original calculada
+    duracion_estimada INTEGER, -- minutos
+    duracion_real INTEGER, -- minutos
+    ruta_polilinea TEXT, -- Encoded polyline de Google
+    
+    -- Negociación y Precio
+    precio_sugerido DECIMAL(8,2), -- Precio calculado por el sistema
+    precio_inicial_pasajero DECIMAL(8,2) NOT NULL, -- Oferta inicial del pasajero
+    precio_final_acordado DECIMAL(8,2), -- Precio final aceptado
+    metodo_pago ENUM('efectivo', 'yape', 'plin', 'tarjeta', 'billetera') DEFAULT 'efectivo',
+    propina DECIMAL(8,2) DEFAULT 0.00,
+    
+    -- Estados
+    estado ENUM(
+        'buscando_conductor',
+        'esperando_ofertas',
+        'negociando',
+        'aceptado',
+        'conductor_en_camino',
+        'conductor_llegado',
+        'viaje_iniciado',
+        'viaje_completado',
+        'cancelado_pasajero',
+        'cancelado_conductor',
+        'cancelado_sistema',
+        'disputado'
+    ) DEFAULT 'buscando_conductor',
+    
+    -- Timestamps importantes
+    fecha_solicitud TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    fecha_aceptacion TIMESTAMP,
+    fecha_llegada_conductor TIMESTAMP,
+    fecha_inicio_viaje TIMESTAMP,
+    fecha_fin_viaje TIMESTAMP,
+    fecha_cancelacion TIMESTAMP,
+    
+    -- Calificaciones
+    calificacion_conductor INTEGER CHECK (calificacion_conductor >= 1 AND calificacion_conductor <= 5),
+    comentario_conductor TEXT,
+    calificacion_pasajero INTEGER CHECK (calificacion_pasajero >= 1 AND calificacion_pasajero <= 5),
+    comentario_pasajero TEXT,
+    
+    -- Adicionales
+    motivo_cancelacion TEXT,
+    notas TEXT,
+    metadata JSONB DEFAULT '{}',
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (pasajero_id) REFERENCES usuarios(id),
+    FOREIGN KEY (conductor_id) REFERENCES conductores(id)
+);
+
+CREATE INDEX idx_viajes_estado ON viajes(estado);
+CREATE INDEX idx_viajes_pasajero ON viajes(pasajero_id);
+CREATE INDEX idx_viajes_conductor ON viajes(conductor_id);
+CREATE INDEX idx_viajes_fecha ON viajes(fecha_solicitud);
+CREATE INDEX idx_viajes_codigo ON viajes(codigo_viaje);
+
+-- =============================================
+-- TABLA: ofertas_viaje (Sistema de Negociación)
+-- =============================================
+CREATE TABLE ofertas_viaje (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    viaje_id UUID NOT NULL,
+    conductor_id UUID NOT NULL,
+    precio_ofertado DECIMAL(8,2) NOT NULL,
+    tiempo_llegada_estimado INTEGER, -- minutos
+    distancia_al_pasajero DECIMAL(5,2), -- km
+    mensaje TEXT,
+    estado ENUM('pendiente', 'aceptada', 'rechazada', 'contraoferta', 'expirada') DEFAULT 'pendiente',
+    contraoferta_precio DECIMAL(8,2),
+    contraoferta_mensaje TEXT,
+    fecha_oferta TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    fecha_expiracion TIMESTAMP,
+    fecha_respuesta TIMESTAMP,
+    
+    FOREIGN KEY (viaje_id) REFERENCES viajes(id) ON DELETE CASCADE,
+    FOREIGN KEY (conductor_id) REFERENCES conductores(id),
+    UNIQUE(viaje_id, conductor_id)
+);
+
+CREATE INDEX idx_ofertas_viaje ON ofertas_viaje(viaje_id);
+CREATE INDEX idx_ofertas_conductor ON ofertas_viaje(conductor_id);
+CREATE INDEX idx_ofertas_estado ON ofertas_viaje(estado);
+
+-- =============================================
+-- TABLA: historial_ubicaciones
+-- =============================================
+CREATE TABLE historial_ubicaciones (
+    id BIGSERIAL PRIMARY KEY,
+    viaje_id UUID NOT NULL,
+    conductor_id UUID NOT NULL,
+    latitud DECIMAL(10,8) NOT NULL,
+    longitud DECIMAL(11,8) NOT NULL,
+    velocidad DECIMAL(5,2), -- km/h
+    rumbo DECIMAL(5,2), -- grados
+    precision DECIMAL(5,2), -- metros
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (viaje_id) REFERENCES viajes(id) ON DELETE CASCADE,
+    FOREIGN KEY (conductor_id) REFERENCES conductores(id)
+);
+
+CREATE INDEX idx_historial_viaje ON historial_ubicaciones(viaje_id);
+CREATE INDEX idx_historial_timestamp ON historial_ubicaciones(timestamp);
+
+-- =============================================
+-- TABLA: transacciones
+-- =============================================
+CREATE TABLE transacciones (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    usuario_id UUID NOT NULL,
+    viaje_id UUID,
+    tipo ENUM('pago_viaje', 'recarga_billetera', 'retiro', 'comision', 'reembolso', 'propina') NOT NULL,
+    monto DECIMAL(10,2) NOT NULL,
+    saldo_anterior DECIMAL(10,2),
+    saldo_posterior DECIMAL(10,2),
+    metodo_pago VARCHAR(50),
+    referencia_externa VARCHAR(100), -- ID de Yape, Plin, etc
+    estado ENUM('pendiente', 'procesando', 'completado', 'fallido', 'reembolsado') DEFAULT 'pendiente',
+    descripcion TEXT,
+    metadata JSONB DEFAULT '{}',
+    fecha_transaccion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
+    FOREIGN KEY (viaje_id) REFERENCES viajes(id)
+);
+
+CREATE INDEX idx_transacciones_usuario ON transacciones(usuario_id);
+CREATE INDEX idx_transacciones_viaje ON transacciones(viaje_id);
+CREATE INDEX idx_transacciones_fecha ON transacciones(fecha_transaccion);
+
+-- =============================================
+-- TABLA: notificaciones
+-- =============================================
+CREATE TABLE notificaciones (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    usuario_id UUID NOT NULL,
+    tipo VARCHAR(50) NOT NULL,
+    titulo VARCHAR(200) NOT NULL,
+    mensaje TEXT NOT NULL,
+    data JSONB DEFAULT '{}',
+    leida BOOLEAN DEFAULT false,
+    enviada BOOLEAN DEFAULT false,
+    fecha_envio TIMESTAMP,
+    fecha_lectura TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_notificaciones_usuario ON notificaciones(usuario_id);
+CREATE INDEX idx_notificaciones_leida ON notificaciones(leida);
+
+-- =============================================
+-- TABLA: tarifas_sugeridas
+-- =============================================
+CREATE TABLE tarifas_sugeridas (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    ciudad VARCHAR(100) NOT NULL,
+    zona VARCHAR(100),
+    precio_base DECIMAL(8,2) NOT NULL,
+    precio_por_km DECIMAL(8,2) NOT NULL,
+    precio_por_minuto DECIMAL(8,2) NOT NULL,
+    precio_minimo DECIMAL(8,2) NOT NULL,
+    hora_pico_inicio TIME,
+    hora_pico_fin TIME,
+    factor_hora_pico DECIMAL(3,2) DEFAULT 1.0,
+    factor_lluvia DECIMAL(3,2) DEFAULT 1.2,
+    activo BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- =============================================
+-- TABLA: dispositivos
+-- =============================================
+CREATE TABLE dispositivos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    usuario_id UUID NOT NULL,
+    device_id VARCHAR(200) UNIQUE NOT NULL,
+    platform ENUM('ios', 'android') NOT NULL,
+    push_token TEXT,
+    modelo VARCHAR(100),
+    version_os VARCHAR(50),
+    version_app VARCHAR(20),
+    ultimo_acceso TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    activo BOOLEAN DEFAULT true,
+    
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_dispositivos_usuario ON dispositivos(usuario_id);
+CREATE INDEX idx_dispositivos_token ON dispositivos(push_token);
+
+-- =============================================
+-- TABLA: reportes_problemas
+-- =============================================
+CREATE TABLE reportes_problemas (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    reportado_por UUID NOT NULL,
+    viaje_id UUID,
+    tipo_reporte ENUM('conductor', 'pasajero', 'viaje', 'app', 'pago', 'seguridad') NOT NULL,
+    categoria VARCHAR(100),
+    descripcion TEXT NOT NULL,
+    evidencias JSONB DEFAULT '[]', -- URLs de imágenes
+    estado ENUM('abierto', 'en_revision', 'resuelto', 'cerrado') DEFAULT 'abierto',
+    prioridad ENUM('baja', 'media', 'alta', 'urgente') DEFAULT 'media',
+    resolucion TEXT,
+    resuelto_por UUID,
+    fecha_reporte TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    fecha_resolucion TIMESTAMP,
+    
+    FOREIGN KEY (reportado_por) REFERENCES usuarios(id),
+    FOREIGN KEY (viaje_id) REFERENCES viajes(id),
+    FOREIGN KEY (resuelto_por) REFERENCES usuarios(id)
+);
+
+-- =============================================
+-- TABLA: favoritos
+-- =============================================
+CREATE TABLE favoritos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    usuario_id UUID NOT NULL,
+    tipo ENUM('direccion', 'conductor') NOT NULL,
+    conductor_id UUID,
+    nombre VARCHAR(100),
+    direccion TEXT,
+    latitud DECIMAL(10,8),
+    longitud DECIMAL(11,8),
+    icono VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+    FOREIGN KEY (conductor_id) REFERENCES conductores(id)
+);
+
+CREATE INDEX idx_favoritos_usuario ON favoritos(usuario_id);
+
+-- =============================================
+-- VISTAS ÚTILES
+-- =============================================
+
+-- Vista de conductores activos
+CREATE VIEW conductores_activos AS
+SELECT 
+    c.*,
+    u.nombre,
+    u.apellidos,
+    u.telefono,
+    u.foto_perfil,
+    u.calificacion_promedio
+FROM conductores c
+JOIN usuarios u ON c.usuario_id = u.id
+WHERE c.disponible = true 
+    AND c.estado_verificacion = 'aprobado'
+    AND u.estado = 'activo';
+
+-- Vista de estadísticas por conductor
+CREATE VIEW estadisticas_conductor AS
+SELECT 
+    c.id,
+    COUNT(v.id) as total_viajes,
+    AVG(v.calificacion_conductor) as promedio_calificacion,
+    SUM(v.precio_final_acordado) as ingresos_totales,
+    SUM(v.distancia_km) as km_totales,
+    COUNT(CASE WHEN v.estado = 'cancelado_conductor' THEN 1 END) as viajes_cancelados
+FROM conductores c
+LEFT JOIN viajes v ON c.id = v.conductor_id
+WHERE v.estado = 'viaje_completado'
+GROUP BY c.id;
+
+-- =============================================
+-- TRIGGERS
+-- =============================================
+
+-- Trigger para actualizar updated_at
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+CREATE TRIGGER update_usuarios_updated_at BEFORE UPDATE ON usuarios
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_conductores_updated_at BEFORE UPDATE ON conductores
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_viajes_updated_at BEFORE UPDATE ON viajes
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Trigger para generar código de viaje
+CREATE OR REPLACE FUNCTION generate_trip_code()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.codigo_viaje = 'MT' || UPPER(SUBSTR(MD5(RANDOM()::TEXT), 1, 8));
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+CREATE TRIGGER generate_trip_code_trigger BEFORE INSERT ON viajes
+    FOR EACH ROW EXECUTE FUNCTION generate_trip_code();
+```
+
+---
+
+## ⚡ Funcionalidades Core
+
+### 5.1 Para Pasajeros
+
+#### Registro y Perfil
+- Registro con número de teléfono
+- Verificación por SMS/WhatsApp
+- Perfil con foto y datos básicos
+- Direcciones favoritas (Casa, Trabajo, etc.)
+- Historial de viajes
+
+#### Solicitud de Viaje
+- Selección de origen y destino en mapa
+- Cálculo automático de distancia y precio sugerido
+- Establecer precio inicial para negociación
+- Agregar referencias y notas
+- Programar viajes (futuro)
+
+#### Proceso de Negociación
+- Recibir múltiples ofertas de conductores
+- Ver perfil y calificación de cada conductor
+- Aceptar, rechazar o contraofertar
+- Chat en tiempo real con conductor
+- Tiempo límite para decisión (2-3 minutos)
+
+#### Durante el Viaje
+- Tracking GPS en tiempo real
+- Compartir viaje con contactos
+- Botón de pánico/emergencia
+- Chat con el conductor
+- Modificar destino (con acuerdo de precio)
+
+#### Post-Viaje
+- Calificación del conductor (1-5 estrellas)
+- Comentarios y feedback
+- Reporte de problemas
+- Propinas (opcional)
+- Recibo digital
+
+### 5.2 Para Conductores
+
+#### Registro y Verificación
+- Registro con documentación completa
+- Upload de licencia, SOAT, fotos
+- Proceso de verificación (24-48 horas)
+- Capacitación online obligatoria
+- Examen de conocimiento de la app
+
+#### Gestión de Disponibilidad
+- Switch online/offline
+- Configurar radio de acción
+- Pausas programadas
+- Modo "última carrera"
+- Zonas preferidas
+
+#### Recepción de Solicitudes
+- Notificación de nuevas solicitudes cercanas
+- Vista de detalles del viaje
+- Ofertar precio competitivo
+- Sistema de auto-oferta basado en histórico
+- Visualizar ofertas de competencia (opcional)
+
+#### Durante el Viaje
+- Navegación GPS integrada
+- Confirmar llegada al punto de recojo
+- Iniciar viaje con confirmación
+- Actualización de ruta en tiempo real
+- Finalizar viaje
+
+#### Gestión Financiera
+- Dashboard de ganancias
+- Historial de transacciones
+- Retiros a cuenta bancaria
+- Reporte para impuestos
+- Metas y objetivos
+
+### 5.3 Para Administradores
+
+#### Dashboard Principal
+- Métricas en tiempo real
+- Mapa de calor de actividad
+- Alertas y notificaciones críticas
+- KPIs principales
+
+#### Gestión de Usuarios
+- Verificación de conductores
+- Resolución de disputas
+- Suspensiones y baneos
+- Comunicación masiva
+- Gestión de documentos
+
+#### Monitoreo de Operaciones
+- Viajes en tiempo real
+- Detección de comportamientos anómalos
+- Gestión de zonas y tarifas
+- Análisis de rutas
+
+#### Reportes y Analytics
+- Reportes financieros
+- Análisis de comportamiento
+- Métricas de calidad
+- Exportación de datos
+
+---
+
+## 💰 Sistema de Negociación
+
+### 6.1 Algoritmo de Precio Sugerido
+
+```javascript
+function calcularPrecioSugerido(distanciaKm, duracionMin, factores) {
+    const tarifaBase = 2.0; // S/. 2.00 base
+    const precioPorKm = 1.5; // S/. 1.50 por km
+    const precioPorMin = 0.2; // S/. 0.20 por minuto
+    
+    let precioBase = tarifaBase + (distanciaKm * precioPorKm) + (duracionMin * precioPorMin);
+    
+    // Aplicar factores
+    if (factores.horaPico) precioBase *= 1.3;
+    if (factores.lluvia) precioBase *= 1.2;
+    if (factores.noche) precioBase *= 1.1;
+    if (factores.zonaRemota) precioBase *= 1.4;
+    
+    // Precio mínimo
+    const precioMinimo = 3.0;
+    
+    return Math.max(precioBase, precioMinimo);
+}
+```
+
+### 6.2 Flujo de Negociación
+
+```mermaid
+stateDiagram-v2
+    [*] --> SolicitudCreada: Pasajero crea solicitud
+    SolicitudCreada --> EsperandoOfertas: Broadcast a conductores
+    EsperandoOfertas --> RecepcionOfertas: Conductores ofertan
+    RecepcionOfertas --> Evaluacion: Pasajero evalúa
+    
+    Evaluacion --> Aceptada: Acepta oferta
+    Evaluacion --> Contraoferta: Propone nuevo precio
+    Evaluacion --> Rechazada: Rechaza todas
+    
+    Contraoferta --> RespuestaConductor: Conductor evalúa
+    RespuestaConductor --> Aceptada: Acepta contraoferta
+    RespuestaConductor --> NuevaOferta: Nueva propuesta
+    RespuestaConductor --> Rechazada: Rechaza
+    
+    Aceptada --> ViajeConfirmado: Match exitoso
+    Rechazada --> EsperandoOfertas: Vuelve a buscar
+    
+    ViajeConfirmado --> [*]
+```
+
+### 6.3 Reglas de Negocio
+
+1. **Tiempo de Oferta**: Conductores tienen 60 segundos para ofertar
+2. **Límite de Ofertas**: Máximo 10 ofertas por solicitud
+3. **Rango de Precios**: ±50% del precio sugerido
+4. **Contraofertas**: Máximo 2 rondas de negociación
+5. **Timeout**: 3 minutos totales para cerrar negociación
+6. **Penalizaciones**: Cancelaciones frecuentes afectan prioridad
+
+---
+
+## 🔌 APIs y Endpoints
+
+### 7.1 Autenticación
+
+```typescript
+// POST /api/auth/register
+{
+    "telefono": "+51999888777",
+    "nombre": "Juan",
+    "apellidos": "Pérez",
+    "tipo_usuario": "pasajero"
+}
+
+// POST /api/auth/verify-otp
+{
+    "telefono": "+51999888777",
+    "codigo": "123456"
+}
+
+// POST /api/auth/refresh-token
+{
+    "refreshToken": "eyJhbGc..."
+}
+
+// Response
+{
+    "accessToken": "eyJhbGc...",
+    "refreshToken": "eyJhbGc...",
+    "usuario": {
+        "id": "uuid",
+        "nombre": "Juan Pérez",
+        "tipo": "pasajero"
+    }
+}
+```
+
+### 7.2 Gestión de Viajes
+
+```typescript
+// POST /api/viajes/solicitar
+{
+    "origen": {
+        "latitud": -12.0464,
+        "longitud": -77.0428,
+        "direccion": "Av. Arequipa 1234, Miraflores"
+    },
+    "destino": {
+        "latitud": -12.0864,
+        "longitud": -77.0528,
+        "direccion": "Plaza de Armas, Lima"
+    },
+    "precio_inicial": 8.50,
+    "metodo_pago": "efectivo",
+    "notas": "Edificio azul, puerta principal"
+}
+
+// GET /api/viajes/:id
+// Response con toda la información del viaje
+
+// POST /api/viajes/:id/ofertas
+{
+    "precio_ofertado": 7.50,
+    "tiempo_llegada": 5,
+    "mensaje": "Estoy a 5 minutos, precio justo"
+}
+
+// PUT /api/viajes/:id/ofertas/:ofertaId
+{
+    "accion": "aceptar", // aceptar, rechazar, contraoferta
+    "contraoferta_precio": 8.00
+}
+
+// POST /api/viajes/:id/iniciar
+// POST /api/viajes/:id/finalizar
+// POST /api/viajes/:id/cancelar
+{
+    "motivo": "Conductor no llegó"
+}
+
+// POST /api/viajes/:id/calificar
+{
+    "calificacion": 5,
+    "comentario": "Excelente servicio",
+    "propina": 2.00
+}
+```
+
+### 7.3 Gestión de Conductores
+
+```typescript
+// POST /api/conductores/registrar
+{
+    "licencia_numero": "Q12345678",
+    "placa": "ABC-123",
+    "marca_moto": "Honda",
+    "modelo_moto": "Wave 110",
+    "soat_numero": "SOA123456",
+    "documentos": {
+        "licencia_frontal": "base64...",
+        "licencia_posterior": "base64...",
+        "soat_foto": "base64...",
+        "foto_moto": "base64..."
+    }
+}
+
+// PUT /api/conductores/disponibilidad
+{
+    "disponible": true,
+    "ubicacion": {
+        "latitud": -12.0464,
+        "longitud": -77.0428
+    }
+}
+
+// GET /api/conductores/estadisticas
+// Response con métricas del conductor
+
+// GET /api/conductores/ganancias
+{
+    "periodo": "semana", // dia, semana, mes
+    "fecha_inicio": "2024-01-01",
+    "fecha_fin": "2024-01-07"
+}
+```
+
+### 7.4 WebSocket Events
+
+```javascript
+// Cliente conecta
+socket.connect({
+    token: "JWT_TOKEN"
+});
+
+// Eventos del Pasajero
+socket.on('nueva_oferta', (data) => {
+    // Conductor hizo una oferta
+});
+
+socket.on('conductor_en_camino', (data) => {
+    // Conductor aceptó y está en camino
+});
+
+socket.on('ubicacion_conductor', (data) => {
+    // Actualización GPS del conductor
+});
+
+// Eventos del Conductor
+socket.on('nueva_solicitud', (data) => {
+    // Nueva solicitud de viaje cercana
+});
+
+socket.on('oferta_aceptada', (data) => {
+    // Pasajero aceptó tu oferta
+});
+
+socket.on('contraoferta', (data) => {
+    // Pasajero hizo contraoferta
+});
+
+// Emitir eventos
+socket.emit('actualizar_ubicacion', {
+    latitud: -12.0464,
+    longitud: -77.0428
+});
+
+socket.emit('enviar_mensaje', {
+    viaje_id: "uuid",
+    mensaje: "Estoy llegando"
+});
+```
+
+---
+
+## 🚀 Implementación de Tiempo Real
+
+### 8.1 Arquitectura WebSocket
+
+```javascript
+// server/websocket/socketManager.js
+class SocketManager {
+    constructor(io, redisClient) {
+        this.io = io;
+        this.redis = redisClient;
+        this.rooms = new Map();
+    }
+
+    // Gestión de conexiones
+    handleConnection(socket) {
+        const userId = socket.handshake.auth.userId;
+        const userType = socket.handshake.auth.userType;
+        
+        // Unir a rooms específicos
+        socket.join(`user:${userId}`);
+        
+        if (userType === 'conductor') {
+            socket.join('conductores');
+            this.registrarConductorActivo(userId, socket.id);
+        }
+        
+        // Event listeners
+        socket.on('actualizar_ubicacion', (data) => 
+            this.handleUbicacion(socket, data));
+        
+        socket.on('ofertar_viaje', (data) => 
+            this.handleOferta(socket, data));
+        
+        socket.on('disconnect', () => 
+            this.handleDisconnect(socket));
+    }
+
+    // Broadcast de nueva solicitud a conductores cercanos
+    async broadcastNuevaSolicitud(viaje) {
+        const conductoresCercanos = await this.getConductoresCercanos(
+            viaje.origen_latitud, 
+            viaje.origen_longitud, 
+            5 // radio en km
+        );
+        
+        conductoresCercanos.forEach(conductorId => {
+            this.io.to(`user:${conductorId}`).emit('nueva_solicitud', {
+                viaje_id: viaje.id,
+                origen: viaje.origen_direccion,
+                destino: viaje.destino_direccion,
+                precio_inicial: viaje.precio_inicial_pasajero,
+                distancia: viaje.distancia_km
+            });
+        });
+    }
+
+    // Tracking GPS durante el viaje
+    async trackViaje(viajeId, conductorId, ubicacion) {
+        // Guardar en Redis para histórico
+        await this.redis.lpush(
+            `tracking:${viajeId}`,
+            JSON.stringify({
+                ...ubicacion,
+                timestamp: Date.now()
+            })
+        );
+        
+        // Emitir al pasajero
+        const viaje = await this.getViaje(viajeId);
+        this.io.to(`user:${viaje.pasajero_id}`).emit('ubicacion_conductor', {
+            latitud: ubicacion.latitud,
+            longitud: ubicacion.longitud,
+            rumbo: ubicacion.rumbo
+        });
+    }
+}
+```
+
+### 8.2 Sistema de Colas con Bull
+
+```javascript
+// queues/viajeQueue.js
+const Queue = require('bull');
+const viajeQueue = new Queue('viajes', REDIS_URL);
+
+// Procesador de trabajos
+viajeQueue.process('timeout_oferta', async (job) => {
+    const { viajeId } = job.data;
+    
+    // Verificar si aún no hay conductor asignado
+    const viaje = await Viaje.findById(viajeId);
+    if (viaje.estado === 'esperando_ofertas') {
+        // Expandir radio de búsqueda
+        await expandirBusqueda(viajeId);
+    }
+});
+
+// Programar timeout al crear solicitud
+async function crearSolicitudViaje(data) {
+    const viaje = await Viaje.create(data);
+    
+    // Timeout de 3 minutos para ofertas
+    await viajeQueue.add('timeout_oferta', 
+        { viajeId: viaje.id },
+        { delay: 180000 }
+    );
+    
+    return viaje;
+}
+```
+
+---
+
+## 💳 Sistema de Pagos
+
+### 9.1 Métodos de Pago Soportados
+
+#### Efectivo (Principal)
+- Confirmación manual por conductor
+- Sistema de cambio/vuelto
+- Registro de transacción post-viaje
+
+#### Billeteras Digitales
+- **Yape**: Integración con API de BCP
+- **Plin**: Integración con Interbank/BBVA
+- **Tunki**: Integración opcional
+
+#### Tarjetas (Futuro)
+- Integración con Culqi o MercadoPago
+- Tokenización de tarjetas
+- PCI DSS compliance
+
+### 9.2 Flujo de Pagos
+
+```javascript
+// services/paymentService.js
+class PaymentService {
+    async procesarPago(viaje) {
+        const { metodo_pago, precio_final_acordado } = viaje;
+        
+        switch(metodo_pago) {
+            case 'efectivo':
+                return this.procesarEfectivo(viaje);
+            case 'yape':
+                return this.procesarYape(viaje);
+            case 'plin':
+                return this.procesarPlin(viaje);
+            case 'billetera':
+                return this.procesarBilletera(viaje);
+            default:
+                throw new Error('Método de pago no válido');
+        }
+    }
+    
+    async procesarYape(viaje) {
+        // Generar QR para pago
+        const qrData = {
+            monto: viaje.precio_final_acordado,
+            concepto: `Viaje ${viaje.codigo_viaje}`,
+            numero: YAPE_BUSINESS_NUMBER
+        };
+        
+        const qrCode = await this.generarQR(qrData);
+        
+        // Webhook para confirmación
+        await this.esperarConfirmacionYape(viaje.id);
+        
+        return { success: true, qrCode };
+    }
+    
+    async distribuirPago(viaje) {
+        const monto = viaje.precio_final_acordado;
+        const comision = monto * 0.15; // 15% comisión
+        const pagoCondcutor = monto - comision;
+        
+        // Actualizar saldo conductor
+        await Conductor.increment('saldo_disponible', {
+            by: pagoConductor,
+            where: { id: viaje.conductor_id }
+        });
+        
+        // Registrar transacciones
+        await Transaccion.bulkCreate([
+            {
+                usuario_id: viaje.conductor_id,
+                tipo: 'pago_viaje',
+                monto: pagoConductor,
+                viaje_id: viaje.id
+            },
+            {
+                usuario_id: ADMIN_USER_ID,
+                tipo: 'comision',
+                monto: comision,
+                viaje_id: viaje.id
+            }
+        ]);
+    }
+}
+```
+
+### 9.3 Sistema de Retiros
+
+```javascript
+// Conductores pueden retirar ganancias
+async function solicitarRetiro(conductorId, monto, cuentaBancaria) {
+    const conductor = await Conductor.findById(conductorId);
+    
+    if (conductor.saldo_disponible < monto) {
+        throw new Error('Saldo insuficiente');
+    }
+    
+    // Crear solicitud de retiro
+    const retiro = await Retiro.create({
+        conductor_id: conductorId,
+        monto,
+        cuenta_destino: cuentaBancaria,
+        estado: 'pendiente'
+    });
+    
+    // Procesar en batch (diario)
+    await procesarRetirosBatch();
+    
+    return retiro;
+}
+```
+
+---
+
+## 🔐 Seguridad
+
+### 10.1 Autenticación y Autorización
+
+#### JWT Implementation
+```javascript
+// middleware/auth.js
+const jwt = require('jsonwebtoken');
+
+function generateTokens(userId, userType) {
+    const accessToken = jwt.sign(
+        { userId, userType },
+        process.env.JWT_SECRET,
+        { expiresIn: '1h' }
+    );
+    
+    const refreshToken = jwt.sign(
+        { userId, userType },
+        process.env.JWT_REFRESH_SECRET,
+        { expiresIn: '30d' }
+    );
+    
+    return { accessToken, refreshToken };
+}
+
+// Middleware de autenticación
+function authenticateToken(req, res, next) {
+    const token = req.headers['authorization']?.split(' ')[1];
+    
+    if (!token) {
+        return res.status(401).json({ error: 'Token requerido' });
+    }
+    
+    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+        if (err) return res.status(403).json({ error: 'Token inválido' });
+        req.user = user;
+        next();
+    });
+}
+
+// Middleware de roles
+function requireRole(role) {
+    return (req, res, next) => {
+        if (req.user.userType !== role) {
+            return res.status(403).json({ error: 'Sin permisos' });
+        }
+        next();
+    };
+}
+```
+
+### 10.2 Seguridad de Datos
+
+#### Encriptación
+```javascript
+// utils/encryption.js
+const crypto = require('crypto');
+
+class Encryption {
+    constructor() {
+        this.algorithm = 'aes-256-cbc';
+        this.key = Buffer.from(process.env.ENCRYPTION_KEY, 'hex');
+        this.iv = crypto.randomBytes(16);
+    }
+    
+    encrypt(text) {
+        const cipher = crypto.createCipheriv(this.algorithm, this.key, this.iv);
+        let encrypted = cipher.update(text, 'utf8', 'hex');
+        encrypted += cipher.final('hex');
+        return this.iv.toString('hex') + ':' + encrypted;
+    }
+    
+    decrypt(text) {
+        const parts = text.split(':');
+        const iv = Buffer.from(parts.shift(), 'hex');
+        const encryptedText = Buffer.from(parts.join(':'), 'hex');
+        const decipher = crypto.createDecipheriv(this.algorithm, this.key, iv);
+        let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
+        decrypted += decipher.final('utf8');
+        return decrypted;
+    }
+}
+
+// Encriptar datos sensibles
+const encryptor = new Encryption();
+const dniEncriptado = encryptor.encrypt(dni);
+```
+
+### 10.3 Validación y Sanitización
+
+```javascript
+// validators/viajeValidator.js
+const { body, validationResult } = require('express-validator');
+
+const validateViaje = [
+    body('origen.latitud')
+        .isFloat({ min: -90, max: 90 })
+        .withMessage('Latitud inválida'),
+    body('origen.longitud')
+        .isFloat({ min: -180, max: 180 })
+        .withMessage('Longitud inválida'),
+    body('precio_inicial')
+        .isFloat({ min: 3.0, max: 100.0 })
+        .withMessage('Precio fuera de rango'),
+    body('origen.direccion')
+        .trim()
+        .escape()
+        .isLength({ min: 5, max: 200 }),
+    
+    (req, res, next) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ errors: errors.array() });
+        }
+        next();
+    }
+];
+```
+
+### 10.4 Rate Limiting
+
+```javascript
+// middleware/rateLimiter.js
+const rateLimit = require('express-rate-limit');
+
+const generalLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutos
+    max: 100, // límite de requests
+    message: 'Demasiadas solicitudes'
+});
+
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 5, // máximo 5 intentos de login
+    skipSuccessfulRequests: true
+});
+
+const viajeCreationLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minuto
+    max: 3, // máximo 3 solicitudes por minuto
+});
+```
+
+### 10.5 Seguridad Adicional
+
+#### Headers de Seguridad
+```javascript
+// middleware/security.js
+const helmet = require('helmet');
+
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            styleSrc: ["'self'", "'unsafe-inline'"],
+            scriptSrc: ["'self'"],
+            imgSrc: ["'self'", "data:", "https:"],
+        },
+    },
+    hsts: {
+        maxAge: 31536000,
+        includeSubDomains: true,
+        preload: true
+    }
+}));
+```
+
+#### Prevención de Inyección SQL
+```javascript
+// Usar siempre prepared statements con Prisma
+const viaje = await prisma.viaje.findFirst({
+    where: {
+        id: viajeId, // Parametrizado automáticamente
+        pasajero_id: userId
+    }
+});
+
+// Nunca concatenar strings en queries
+// MAL: `SELECT * FROM viajes WHERE id = ${id}`
+// BIEN: Usar ORM o prepared statements
+```
+
+---
+
+## 💰 Monetización
+
+### 11.1 Modelo de Ingresos
+
+#### Comisiones por Viaje
+- **Modelo Base**: 15% de cada viaje completado
+- **Modelo Dinámico**: 
+  - Horas valle: 12%
+  - Horas normales: 15%
+  - Horas pico: 18%
+  - Eventos especiales: 20%
+
+#### Suscripciones para Conductores
+```yaml
+Plan Básico (Gratis):
+  - Comisión: 15%
+  - Viajes ilimitados
+  - Soporte básico
+
+Plan Pro (S/. 29.90/mes):
+  - Comisión reducida: 12%
+  - Prioridad en asignación
+  - Estadísticas avanzadas
+  - Soporte prioritario
+
+Plan Premium (S/. 49.90/mes):
+  - Comisión mínima: 10%
+  - Primera prioridad
+  - Zonas exclusivas
+  - Capacitación mensual
+  - Soporte 24/7
+```
+
+#### Servicios Adicionales
+- **Publicidad en App**: Banners y promociones
+- **Viajes Corporativos**: B2B con empresas
+- **API para Terceros**: Integración con otros servicios
+- **Data Analytics**: Venta de insights de movilidad
+- **Seguros**: Comisión por venta de microseguros
+
+### 11.2 Estrategia de Precios
+
+```javascript
+// Cálculo de comisión dinámica
+function calcularComision(viaje, conductor) {
+    let comisionBase = 0.15;
+    
+    // Ajustes por suscripción
+    if (conductor.plan === 'pro') comisionBase = 0.12;
+    if (conductor.plan === 'premium') comisionBase = 0.10;
+    
+    // Ajustes por demanda
+    const hora = new Date().getHours();
+    if (hora >= 7 && hora <= 9) comisionBase += 0.03; // hora pico AM
+    if (hora >= 17 && hora <= 20) comisionBase += 0.03; // hora pico PM
+    
+    // Incentivos por zona
+    if (viaje.zona === 'remota') comisionBase -= 0.02;
+    
+    // Límites
+    comisionBase = Math.max(0.08, Math.min(0.20, comisionBase));
+    
+    return viaje.precio_final * comisionBase;
+}
+```
+
+---
+
+## 📅 Plan de Desarrollo
+
+### 12.1 Fase 1: MVP (2-3 meses)
+
+#### Mes 1: Backend Core
+- [ ] Setup del proyecto y arquitectura
+- [ ] Base de datos y modelos
+- [ ] APIs de autenticación
+- [ ] APIs básicas de viajes
+- [ ] Sistema de negociación simple
+
+#### Mes 2: Frontend Móvil
+- [ ] UI/UX para pasajero
+- [ ] UI/UX para conductor
+- [ ] Integración con mapas
+- [ ] WebSocket básico
+- [ ] Testing con usuarios beta
+
+#### Mes 3: Integración y Testing
+- [ ] Integración completa
+- [ ] Sistema de pagos efectivo
+- [ ] Notificaciones push
+- [ ] Testing exhaustivo
+- [ ] Preparación para lanzamiento
+
+### 12.2 Fase 2: Lanzamiento (1-2 meses)
+
+#### Mes 4: Soft Launch
+- [ ] Lanzamiento en ciudad piloto
+- [ ] Onboarding de 50 conductores
+- [ ] Marketing inicial
+- [ ] Recolección de feedback
+- [ ] Ajustes y correcciones
+
+#### Mes 5: Expansión
+- [ ] Mejoras basadas en feedback
+- [ ] Panel administrativo completo
+- [ ] Sistema de reportes
+- [ ] Integración Yape/Plin
+- [ ] Expansión a 2-3 ciudades
+
+### 12.3 Fase 3: Crecimiento (3-6 meses)
+
+- [ ] Machine Learning para precios
+- [ ] Programa de referidos
+- [ ] Viajes programados
+- [ ] Rutas múltiples
+- [ ] Integración con empresas
+- [ ] Expansión nacional
+
+### 12.4 Roadmap Técnico
+
+```mermaid
+gantt
+    title Roadmap de Desarrollo MotoTaxi App
+    dateFormat  YYYY-MM-DD
+    
+    section Backend
+    Setup y Arquitectura     :2024-02-01, 7d
+    Base de Datos            :7d
+    APIs Core                :14d
+    Sistema Negociación      :10d
+    WebSockets               :7d
+    
+    section Frontend
+    Setup React Native       :2024-02-15, 5d
+    UI Pasajero             :15d
+    UI Conductor            :15d
+    Integración Maps        :7d
+    
+    section Integración
+    Testing Integración     :2024-03-15, 10d
+    Sistema Pagos           :7d
+    Notificaciones          :5d
+    
+    section Lanzamiento
+    Beta Testing            :2024-04-01, 14d
+    Soft Launch             :14d
+    Marketing               :30d
+    
+    section Crecimiento
+    Feedback y Mejoras      :2024-05-01, 30d
+    Nuevas Features         :60d
+    Expansión               :90d
+```
+
+---
+
+## 💵 Estimación de Costos
+
+### 13.1 Costos de Desarrollo
+
+#### Equipo Técnico (3 meses MVP)
+```yaml
+Desarrollador Backend Senior:
+  - Tarifa: $3,000/mes
+  - Total: $9,000
+
+Desarrollador Mobile:
+  - Tarifa: $2,500/mes
+  - Total: $7,500
+
+Diseñador UI/UX:
+  - Tarifa: $2,000/mes (part-time)
+  - Total: $6,000
+
+QA Tester:
+  - Tarifa: $1,500/mes (último mes)
+  - Total: $1,500
+
+Total Desarrollo: $24,000
+```
+
+#### Infraestructura (mensual)
+```yaml
+Desarrollo/Staging:
+  - VPS (4GB): $20
+  - Base de datos: $15
+  - Total: $35/mes
+
+Producción (inicial):
+  - VPS (8GB): $40
+  - Base de datos: $25
+  - CDN: $20
+  - Backups: $10
+  - Total: $95/mes
+
+APIs Externas:
+  - Google Maps: $200/mes (estimado)
+  - SMS (Twilio): $100/mes
+  - Push Notifications: $50/mes
+  - Total: $350/mes
+```
+
+### 13.2 Costos Operativos
+
+#### Marketing y Lanzamiento
+```yaml
+Marketing Digital:
+  - Facebook/Instagram Ads: $500/mes
+  - Google Ads: $300/mes
+  - Influencers locales: $200/mes
+
+Marketing Offline:
+  - Volantes: $200
+  - Stickers para motos: $300
+  - Eventos de lanzamiento: $500
+
+Total Marketing (3 meses): $3,000
+```
+
+#### Operaciones
+```yaml
+Equipo Operativo:
+  - Community Manager: $800/mes
+  - Soporte al Cliente (2): $1,200/mes
+  - Verificador de Conductores: $600/mes
+
+Legal y Contabilidad:
+  - Constitución empresa: $500
+  - Licencias y permisos: $1,000
+  - Contador: $200/mes
+  - Asesoría legal: $300/mes
+```
+
+### 13.3 Proyección Financiera
+
+#### Inversión Inicial Total
+```yaml
+Desarrollo (3 meses): $24,000
+Infraestructura (6 meses): $2,280
+Marketing inicial: $3,000
+Operaciones (3 meses): $8,400
+Legal y otros: $2,000
+Buffer (20%): $7,936
+
+TOTAL: ~$47,616
+```
+
+#### Break-even Analysis
+```yaml
+Asumiendo:
+  - 100 viajes/día año 1
+  - Precio promedio: S/. 8
+  - Comisión: 15%
+  
+Ingresos mensuales:
+  - 3,000 viajes × S/. 8 × 15% = S/. 3,600
+  - En USD: ~$950/mes
+  
+Break-even: Mes 18-24 aproximadamente
+```
+
+---
+
+## ⚖️ Consideraciones Legales
+
+### 14.1 Requisitos Regulatorios Perú
+
+#### Empresa y Licencias
+- Constitución de SAC o EIRL
+- RUC para emisión de facturas
+- Licencia municipal de funcionamiento
+- Registro en INDECOPI (marca)
+- Certificación de software de transporte (MTC - en evaluación)
+
+#### Protección de Datos
+- Cumplimiento con Ley N° 29733 (Protección de Datos Personales)
+- Registro de banco de datos ante MINJUS
+- Políticas de privacidad claras
+- Consentimiento explícito para uso de datos
+
+#### Aspectos Laborales
+- Conductores como trabajadores independientes
+- Contratos de prestación de servicios
+- No configurar relación laboral
+- Seguros contra accidentes
+
+### 14.2 Términos y Condiciones
+
+#### Para Pasajeros
+- Aceptación de términos al registrarse
+- Deslinde de responsabilidad
+- Uso apropiado del servicio
+- Política de cancelaciones
+- Resolución de disputas
+
+#### Para Conductores
+- Contrato de prestación de servicios
+- Obligaciones y responsabilidades
+- Código de conducta
+- Penalizaciones y suspensiones
+- Propiedad intelectual
+
+### 14.3 Seguros y Responsabilidades
+
+```yaml
+Seguros Requeridos:
+  - SOAT obligatorio (conductor)
+  - Seguro complementario de accidentes
+  - Seguro de responsabilidad civil
+  - Seguro de datos y cyber-riesgos
+
+Responsabilidades:
+  - Plataforma: Intermediación tecnológica
+  - Conductor: Prestación del servicio
+  - Pasajero: Uso adecuado
+```
+
+---
+
+## 📊 KPIs y Métricas
+
+### 15.1 Métricas Clave
+
+#### Operacionales
+- **Viajes completados/día**
+- **Tasa de conversión** (solicitud → viaje completado)
+- **Tiempo promedio de espera**
+- **Tasa de cancelación**
+- **Distancia promedio por viaje**
+
+#### Financieras
+- **GMV** (Gross Merchandise Value)
+- **Revenue** (Ingresos por comisiones)
+- **CAC** (Customer Acquisition Cost)
+- **LTV** (Lifetime Value)
+- **Burn Rate mensual**
+
+#### Calidad
+- **NPS** (Net Promoter Score)
+- **Calificación promedio**
+- **Tasa de retención** (30, 60, 90 días)
+- **Quejas por 100 viajes**
+- **Tiempo de resolución de problemas**
+
+### 15.2 Dashboard de Monitoreo
+
+```sql
+-- Query para dashboard principal
+WITH metricas_diarias AS (
+    SELECT 
+        DATE(fecha_solicitud) as fecha,
+        COUNT(*) as total_viajes,
+        COUNT(CASE WHEN estado = 'viaje_completado' THEN 1 END) as viajes_exitosos,
+        AVG(precio_final_acordado) as ticket_promedio,
+        AVG(EXTRACT(EPOCH FROM (fecha_aceptacion - fecha_solicitud))/60) as tiempo_espera_min,
+        COUNT(DISTINCT pasajero_id) as usuarios_activos,
+        COUNT(DISTINCT conductor_id) as conductores_activos
+    FROM viajes
+    WHERE fecha_solicitud >= CURRENT_DATE - INTERVAL '30 days'
+    GROUP BY DATE(fecha_solicitud)
+)
+SELECT 
+    fecha,
+    total_viajes,
+    viajes_exitosos,
+    ROUND(viajes_exitosos::numeric/total_viajes::numeric * 100, 2) as tasa_exito,
+    ROUND(ticket_promedio, 2) as ticket_promedio,
+    ROUND(tiempo_espera_min, 2) as tiempo_espera,
+    usuarios_activos,
+    conductores_activos,
+    ROUND(viajes_exitosos * ticket_promedio * 0.15, 2) as revenue_estimado
+FROM metricas_diarias
+ORDER BY fecha DESC;
+```
+
+---
+
+## 🚀 Estrategias de Lanzamiento
+
+### 16.1 Go-to-Market Strategy
+
+#### Fase Pre-lanzamiento
+1. **Reclutamiento de Conductores**
+   - Campaña en paraderos de mototaxis
+   - Incentivos de registro temprano
+   - Capacitación gratuita
+   - Bonos por primeros viajes
+
+2. **Beta Testing**
+   - 50 conductores seleccionados
+   - 200 usuarios beta
+   - Zona geográfica limitada
+   - Feedback intensivo
+
+#### Lanzamiento Soft
+1. **Ciudad Piloto**: Tarapoto/Iquitos
+2. **Objetivos Mes 1**:
+   - 200 conductores activos
+   - 1,000 usuarios registrados
+   - 100 viajes/día
+   - NPS > 50
+
+#### Estrategias de Crecimiento
+- **Referidos**: S/. 5 por cada nuevo usuario activo
+- **Primeros Viajes**: 50% descuento primeros 3 viajes
+- **Gamificación**: Logros y recompensas para conductores
+- **Partnerships**: Alianzas con comercios locales
+
+### 16.2 Plan de Contingencia
+
+#### Riesgos Identificados
+1. **Baja adopción inicial**
+   - Plan: Aumentar incentivos
+   - Budget adicional: $2,000
+
+2. **Problemas técnicos**
+   - Plan: Equipo de respuesta 24/7
+   - Rollback procedures
+
+3. **Competencia agresiva**
+   - Plan: Diferenciación en servicio
+   - Focus en nichos específicos
+
+---
+
+## 📝 Conclusiones y Próximos Pasos
+
+### Resumen Ejecutivo Final
+
+MotoTaxi Connect representa una oportunidad significativa para digitalizar y formalizar el mercado de mototaxis en Perú, con un modelo de negociación único que beneficia tanto a pasajeros como a conductores.
+
+### Próximos Pasos Inmediatos
+
+1. **Semana 1-2**:
+   - Validar concepto con 20 mototaxistas
+   - Crear mockups detallados
+   - Definir stack tecnológico final
+
+2. **Semana 3-4**:
+   - Iniciar desarrollo del backend
+   - Contratar equipo técnico
+   - Establecer partnerships iniciales
+
+3. **Mes 2**:
+   - MVP del backend completo
+   - Inicio desarrollo mobile
+   - Preparar documentación legal
+
+### Factores Críticos de Éxito
+
+✅ **Experiencia de Usuario Superior**
+✅ **Onboarding Rápido de Conductores**
+✅ **Sistema de Negociación Eficiente**
+✅ **Confiabilidad Técnica**
+✅ **Precio Competitivo**
+✅ **Soporte Local Efectivo**
+
+---
+
+## 📚 Anexos
+
+### A. Recursos y Herramientas
+
+- [React Native Documentation](https://reactnative.dev/)
+- [NestJS Documentation](https://nestjs.com/)
+- [PostgreSQL + PostGIS](https://postgis.net/)
+- [Socket.io Guide](https://socket.io/docs/)
+- [Google Maps Platform](https://developers.google.com/maps)
+
+### B. Contactos Útiles
+
+- MTC (Ministerio de Transportes)
+- ASETAM (Asociaciones de Mototaxistas)
+- INDECOPI (Registro de marca)
+- Culqi/MercadoPago (Pagos)
+
+### C. Métricas de la Industria
+
+- Mercado de mototaxis Perú: ~500,000 unidades
+- Viajes diarios promedio: 5-10 por conductor
+- Ticket promedio: S/. 5-10
+- Penetración smartphones: 70%+ en zonas urbanas
+
+---
+
+*Documento preparado para el desarrollo de MotoTaxi Connect*
+*Versión 1.0 - Enero 2024*
+*Actualización continua en base a feedback y desarrollo*
