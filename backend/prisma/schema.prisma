@@ -1,0 +1,470 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [postgis]
+}
+
+enum TipoUsuario {
+  pasajero
+  conductor
+  admin
+}
+
+enum EstadoUsuario {
+  activo
+  suspendido
+  verificando
+  baneado
+}
+
+enum Genero {
+  M
+  F
+  O
+}
+
+model Usuario {
+  id                    String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  telefono              String              @unique @db.VarChar(15)
+  codigoPais            String              @default("+51") @db.VarChar(5)
+  nombre                String              @db.VarChar(100)
+  apellidos             String?             @db.VarChar(100)
+  email                 String?             @unique @db.VarChar(100)
+  dni                   String?             @unique @db.VarChar(8)
+  fechaNacimiento       DateTime?           @db.Date
+  genero                Genero?
+  fotoPerfil            String?             @db.Text
+  tipoUsuario           TipoUsuario
+  estado                EstadoUsuario       @default(verificando)
+  calificacionPromedio  Decimal             @default(0.00) @db.Decimal(3, 2)
+  totalViajes           Int                 @default(0)
+  fechaRegistro         DateTime            @default(now())
+  ultimoAcceso          DateTime?
+  tokenDispositivo      String?             @db.Text
+  preferencias          Json                @default("{}")
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  // Relaciones
+  conductor             Conductor?
+  viajesPasajero        Viaje[]             @relation("ViajesPasajero")
+  transacciones         Transaccion[]
+  notificaciones        Notificacion[]
+  dispositivos          Dispositivo[]
+  reportesRealizados    ReporteProblema[]   @relation("ReportesRealizados")
+  reportesResueltos     ReporteProblema[]   @relation("ReportesResueltos")
+  favoritos             Favorito[]
+  conductoresVerificados Conductor[]        @relation("ConductoresVerificados")
+
+  @@index([telefono])
+  @@index([tipoUsuario])
+  @@index([estado])
+  @@map("usuarios")
+}
+
+enum EstadoVerificacion {
+  pendiente
+  aprobado
+  rechazado
+  documentos_vencidos
+}
+
+model Conductor {
+  id                         String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  usuarioId                  String                @unique @db.Uuid
+
+  // Documentación
+  licenciaNumero             String                @db.VarChar(20)
+  licenciaCategoria          String?               @db.VarChar(10)
+  licenciaVencimiento        DateTime              @db.Date
+  licenciaFotoFrontal        String?               @db.Text
+  licenciaFotoPosterior      String?               @db.Text
+
+  // Vehículo
+  placa                      String                @unique @db.VarChar(10)
+  marcaMoto                  String?               @db.VarChar(50)
+  modeloMoto                 String?               @db.VarChar(50)
+  añoMoto                    Int?
+  colorMoto                  String?               @db.VarChar(30)
+  fotoMoto                   String?               @db.Text
+
+  // Seguros
+  soatNumero                 String?               @db.VarChar(50)
+  soatAseguradora            String?               @db.VarChar(100)
+  soatVencimiento            DateTime?             @db.Date
+  soatFoto                   String?               @db.Text
+
+  // Operación
+  estadoVerificacion         EstadoVerificacion    @default(pendiente)
+  motivoRechazo              String?               @db.Text
+  disponible                 Boolean               @default(false)
+  enServicio                 Boolean               @default(false)
+  ubicacionActual            String?               @db.Text // Geography(POINT, 4326)
+  ultimaActualizacionUbicacion DateTime?
+
+  // Financiero
+  saldoGanado                Decimal               @default(0.00) @db.Decimal(10, 2)
+  saldoDisponible            Decimal               @default(0.00) @db.Decimal(10, 2)
+  comisionPorcentaje         Decimal               @default(15.00) @db.Decimal(5, 2)
+
+  // Estadísticas
+  viajesCompletados          Int                   @default(0)
+  viajesCancelados           Int                   @default(0)
+  kmRecorridos               Decimal               @default(0.00) @db.Decimal(10, 2)
+  tiempoEnLinea              Int                   @default(0)
+
+  verificadoPorId            String?               @db.Uuid
+  fechaVerificacion          DateTime?
+  createdAt                  DateTime              @default(now())
+  updatedAt                  DateTime              @updatedAt
+
+  // Relaciones
+  usuario                    Usuario               @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  verificadoPor              Usuario?              @relation("ConductoresVerificados", fields: [verificadoPorId], references: [id])
+  viajes                     Viaje[]               @relation("ViajesConductor")
+  ofertas                    OfertaViaje[]
+  historialUbicaciones       HistorialUbicacion[]
+  favoritoDe                 Favorito[]
+
+  @@index([disponible])
+  @@index([estadoVerificacion])
+  @@map("conductores")
+}
+
+enum EstadoViaje {
+  buscando_conductor
+  esperando_ofertas
+  negociando
+  aceptado
+  conductor_en_camino
+  conductor_llegado
+  viaje_iniciado
+  viaje_completado
+  cancelado_pasajero
+  cancelado_conductor
+  cancelado_sistema
+  disputado
+}
+
+enum MetodoPago {
+  efectivo
+  yape
+  plin
+  tarjeta
+  billetera
+}
+
+model Viaje {
+  id                       String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  codigoViaje              String              @unique @db.VarChar(10)
+
+  // Participantes
+  pasajeroId               String              @db.Uuid
+  conductorId              String?             @db.Uuid
+
+  // Origen
+  origenLatitud            Decimal             @db.Decimal(10, 8)
+  origenLongitud           Decimal             @db.Decimal(11, 8)
+  origenDireccion          String              @db.Text
+  origenReferencia         String?             @db.Text
+
+  // Destino
+  destinoLatitud           Decimal             @db.Decimal(10, 8)
+  destinoLongitud          Decimal             @db.Decimal(11, 8)
+  destinoDireccion         String              @db.Text
+  destinoReferencia        String?             @db.Text
+
+  // Métricas
+  distanciaKm              Decimal?            @db.Decimal(5, 2)
+  distanciaCalculadaKm     Decimal?            @db.Decimal(5, 2)
+  duracionEstimada         Int?
+  duracionReal             Int?
+  rutaPolilinea            String?             @db.Text
+
+  // Negociación y Precio
+  precioSugerido           Decimal?            @db.Decimal(8, 2)
+  precioInicialPasajero    Decimal             @db.Decimal(8, 2)
+  precioFinalAcordado      Decimal?            @db.Decimal(8, 2)
+  metodoPago               MetodoPago          @default(efectivo)
+  propina                  Decimal             @default(0.00) @db.Decimal(8, 2)
+
+  // Estados
+  estado                   EstadoViaje         @default(buscando_conductor)
+
+  // Timestamps
+  fechaSolicitud           DateTime            @default(now())
+  fechaAceptacion          DateTime?
+  fechaLlegadaConductor    DateTime?
+  fechaInicioViaje         DateTime?
+  fechaFinViaje            DateTime?
+  fechaCancelacion         DateTime?
+
+  // Calificaciones
+  calificacionConductor    Int?
+  comentarioConductor      String?             @db.Text
+  calificacionPasajero     Int?
+  comentarioPasajero       String?             @db.Text
+
+  // Adicionales
+  motivoCancelacion        String?             @db.Text
+  notas                    String?             @db.Text
+  metadata                 Json                @default("{}")
+
+  createdAt                DateTime            @default(now())
+  updatedAt                DateTime            @updatedAt
+
+  // Relaciones
+  pasajero                 Usuario             @relation("ViajesPasajero", fields: [pasajeroId], references: [id])
+  conductor                Conductor?          @relation("ViajesConductor", fields: [conductorId], references: [id])
+  ofertas                  OfertaViaje[]
+  historialUbicaciones     HistorialUbicacion[]
+  transacciones            Transaccion[]
+  reportes                 ReporteProblema[]
+
+  @@index([estado])
+  @@index([pasajeroId])
+  @@index([conductorId])
+  @@index([fechaSolicitud])
+  @@index([codigoViaje])
+  @@map("viajes")
+}
+
+enum EstadoOferta {
+  pendiente
+  aceptada
+  rechazada
+  contraoferta
+  expirada
+}
+
+model OfertaViaje {
+  id                       String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  viajeId                  String              @db.Uuid
+  conductorId              String              @db.Uuid
+  precioOfertado           Decimal             @db.Decimal(8, 2)
+  tiempoLlegadaEstimado    Int?
+  distanciaAlPasajero      Decimal?            @db.Decimal(5, 2)
+  mensaje                  String?             @db.Text
+  estado                   EstadoOferta        @default(pendiente)
+  contraofertaPrecio       Decimal?            @db.Decimal(8, 2)
+  contraofertaMensaje      String?             @db.Text
+  fechaOferta              DateTime            @default(now())
+  fechaExpiracion          DateTime?
+  fechaRespuesta           DateTime?
+
+  // Relaciones
+  viaje                    Viaje               @relation(fields: [viajeId], references: [id], onDelete: Cascade)
+  conductor                Conductor           @relation(fields: [conductorId], references: [id])
+
+  @@unique([viajeId, conductorId])
+  @@index([viajeId])
+  @@index([conductorId])
+  @@index([estado])
+  @@map("ofertas_viaje")
+}
+
+model HistorialUbicacion {
+  id                       BigInt              @id @default(autoincrement())
+  viajeId                  String              @db.Uuid
+  conductorId              String              @db.Uuid
+  latitud                  Decimal             @db.Decimal(10, 8)
+  longitud                 Decimal             @db.Decimal(11, 8)
+  velocidad                Decimal?            @db.Decimal(5, 2)
+  rumbo                    Decimal?            @db.Decimal(5, 2)
+  precision                Decimal?            @db.Decimal(5, 2)
+  timestamp                DateTime            @default(now())
+
+  // Relaciones
+  viaje                    Viaje               @relation(fields: [viajeId], references: [id], onDelete: Cascade)
+  conductor                Conductor           @relation(fields: [conductorId], references: [id])
+
+  @@index([viajeId])
+  @@index([timestamp])
+  @@map("historial_ubicaciones")
+}
+
+enum TipoTransaccion {
+  pago_viaje
+  recarga_billetera
+  retiro
+  comision
+  reembolso
+  propina
+}
+
+enum EstadoTransaccion {
+  pendiente
+  procesando
+  completado
+  fallido
+  reembolsado
+}
+
+model Transaccion {
+  id                       String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  usuarioId                String              @db.Uuid
+  viajeId                  String?             @db.Uuid
+  tipo                     TipoTransaccion
+  monto                    Decimal             @db.Decimal(10, 2)
+  saldoAnterior            Decimal?            @db.Decimal(10, 2)
+  saldoPosterior           Decimal?            @db.Decimal(10, 2)
+  metodoPago               String?             @db.VarChar(50)
+  referenciaExterna        String?             @db.VarChar(100)
+  estado                   EstadoTransaccion   @default(pendiente)
+  descripcion              String?             @db.Text
+  metadata                 Json                @default("{}")
+  fechaTransaccion         DateTime            @default(now())
+
+  // Relaciones
+  usuario                  Usuario             @relation(fields: [usuarioId], references: [id])
+  viaje                    Viaje?              @relation(fields: [viajeId], references: [id])
+
+  @@index([usuarioId])
+  @@index([viajeId])
+  @@index([fechaTransaccion])
+  @@map("transacciones")
+}
+
+model Notificacion {
+  id                       String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  usuarioId                String              @db.Uuid
+  tipo                     String              @db.VarChar(50)
+  titulo                   String              @db.VarChar(200)
+  mensaje                  String              @db.Text
+  data                     Json                @default("{}")
+  leida                    Boolean             @default(false)
+  enviada                  Boolean             @default(false)
+  fechaEnvio               DateTime?
+  fechaLectura             DateTime?
+  createdAt                DateTime            @default(now())
+
+  // Relaciones
+  usuario                  Usuario             @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId])
+  @@index([leida])
+  @@map("notificaciones")
+}
+
+model TarifaSugerida {
+  id                       String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ciudad                   String              @db.VarChar(100)
+  zona                     String?             @db.VarChar(100)
+  precioBase               Decimal             @db.Decimal(8, 2)
+  precioPorKm              Decimal             @db.Decimal(8, 2)
+  precioPorMinuto          Decimal             @db.Decimal(8, 2)
+  precioMinimo             Decimal             @db.Decimal(8, 2)
+  horaPicoInicio           DateTime?           @db.Time()
+  horaPicoFin              DateTime?           @db.Time()
+  factorHoraPico           Decimal             @default(1.0) @db.Decimal(3, 2)
+  factorLluvia             Decimal             @default(1.2) @db.Decimal(3, 2)
+  activo                   Boolean             @default(true)
+  createdAt                DateTime            @default(now())
+  updatedAt                DateTime            @updatedAt
+
+  @@map("tarifas_sugeridas")
+}
+
+enum Platform {
+  ios
+  android
+}
+
+model Dispositivo {
+  id                       String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  usuarioId                String              @db.Uuid
+  deviceId                 String              @unique @db.VarChar(200)
+  platform                 Platform
+  pushToken                String?             @db.Text
+  modelo                   String?             @db.VarChar(100)
+  versionOs                String?             @db.VarChar(50)
+  versionApp               String?             @db.VarChar(20)
+  ultimoAcceso             DateTime            @default(now())
+  activo                   Boolean             @default(true)
+
+  // Relaciones
+  usuario                  Usuario             @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId])
+  @@index([pushToken])
+  @@map("dispositivos")
+}
+
+enum TipoReporte {
+  conductor
+  pasajero
+  viaje
+  app
+  pago
+  seguridad
+}
+
+enum EstadoReporte {
+  abierto
+  en_revision
+  resuelto
+  cerrado
+}
+
+enum PrioridadReporte {
+  baja
+  media
+  alta
+  urgente
+}
+
+model ReporteProblema {
+  id                       String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reportadoPorId           String              @db.Uuid
+  viajeId                  String?             @db.Uuid
+  tipoReporte              TipoReporte
+  categoria                String?             @db.VarChar(100)
+  descripcion              String              @db.Text
+  evidencias               Json                @default("[]")
+  estado                   EstadoReporte       @default(abierto)
+  prioridad                PrioridadReporte    @default(media)
+  resolucion               String?             @db.Text
+  resueltoPorId            String?             @db.Uuid
+  fechaReporte             DateTime            @default(now())
+  fechaResolucion          DateTime?
+
+  // Relaciones
+  reportadoPor             Usuario             @relation("ReportesRealizados", fields: [reportadoPorId], references: [id])
+  viaje                    Viaje?              @relation(fields: [viajeId], references: [id])
+  resueltoPor              Usuario?            @relation("ReportesResueltos", fields: [resueltoPorId], references: [id])
+
+  @@map("reportes_problemas")
+}
+
+enum TipoFavorito {
+  direccion
+  conductor
+}
+
+model Favorito {
+  id                       String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  usuarioId                String              @db.Uuid
+  tipo                     TipoFavorito
+  conductorId              String?             @db.Uuid
+  nombre                   String?             @db.VarChar(100)
+  direccion                String?             @db.Text
+  latitud                  Decimal?            @db.Decimal(10, 8)
+  longitud                 Decimal?            @db.Decimal(11, 8)
+  icono                    String?             @db.VarChar(50)
+  createdAt                DateTime            @default(now())
+
+  // Relaciones
+  usuario                  Usuario             @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  conductor                Conductor?          @relation(fields: [conductorId], references: [id])
+
+  @@index([usuarioId])
+  @@map("favoritos")
+}
